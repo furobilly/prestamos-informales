@@ -430,7 +430,7 @@ function render(){
 function togglePagado(mes){
   if(!S.ov[mes]) S.ov[mes]={};
   S.ov[mes].pagado=!S.ov[mes].pagado;
-  render();
+  render(); saveState();
 }
 
 function addLibre(){
@@ -439,13 +439,13 @@ function addLibre(){
   if(!m||m<1000||m%1000!==0){alert('El monto debe ser múltiplo de $1,000 (mínimo $1,000)');return;}
   if(!S.ov[mes]) S.ov[mes]={};
   S.ov[mes].libre=(S.ov[mes].libre||0)+m;
-  render();
+  render(); saveState();
 }
 
 function borrarLibre(mes){
   if(!confirm('¿Eliminar este abono libre?'))return;
   if(S.ov[mes]) S.ov[mes].libre=0;
-  render();
+  render(); saveState();
 }
 
 function editLibre(mes){
@@ -456,7 +456,7 @@ function editLibre(mes){
   if(!n||n<0||n%1000!==0){alert('Debe ser múltiplo de $1,000 o 0 para eliminar.');return;}
   if(!S.ov[mes])S.ov[mes]={};
   S.ov[mes].libre=n;
-  render();
+  render(); saveState();
 }
 
 function removeNota(id){
@@ -472,7 +472,7 @@ function closeModal(){$('modal').classList.remove('show')}
 function reiniciar(){
   if(!confirm('¿Borrar todo y empezar desde cero?'))return;
   S={notas:[],pagoFijo:2550,trimBase:1000,fechaInicio:new Date(2026,5,1),ov:{},nid:1};
-  render();
+  render(); saveState();
 }
 
 function confirmNota(){
@@ -484,7 +484,7 @@ function confirmNota(){
   S.notas.push({id:S.nid,nombre,monto,startMes:smes,fechaSol});
   S.nid++;
   closeModal();
-  render();
+  render(); saveState();
 }
 
 function updateClock(){
@@ -500,9 +500,6 @@ function saveState(){
   localStorage.setItem('prest_state',JSON.stringify(data));
   if(window._fbSave) window._fbSave(data);
 }
-const _origRender=render;
-function render(){_origRender();saveState();}
-
 // ── Carga estado ─────────────────────────────────────────
 function applyState(data){
   if(!data)return;
