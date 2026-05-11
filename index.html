@@ -1,0 +1,606 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Plan de Liquidación · Préstamos</title>
+<style>
+*{box-sizing:border-box;margin:0;padding:0}
+body{font-family:system-ui,sans-serif;background:#f1f5f9;color:#0f172a;font-size:14px;max-width:1400px;margin:0 auto;padding:0 12px}
+.hdr{background:#1e3a5f;color:#fff;padding:12px 20px;display:flex;justify-content:space-between;align-items:center}
+.hdr h1{font-size:15px;font-weight:700}
+.hdr-sub{font-size:11px;opacity:.75;margin-top:2px}
+.clock{text-align:right;font-size:11px;opacity:.85}
+.cards{display:grid;grid-template-columns:repeat(auto-fit,minmax(140px,1fr));gap:10px;padding:14px 20px}
+.card{background:#fff;border-radius:8px;padding:10px 11px;border:1px solid #e2e8f0;text-align:center}
+.card.c-blue{border-left:4px solid #2563eb}
+.card.c-red{border-left:4px solid #dc2626}
+.card.c-green{border-left:4px solid #16a34a}
+.card.c-amber{border-left:4px solid #d97706}
+.card.c-purple{border-left:4px solid #7c3aed}
+.clabel{font-size:12px;color:#64748b;text-transform:uppercase;letter-spacing:.04em;margin-bottom:4px}
+.cval{font-size:1.3rem;font-weight:700;line-height:1.2}
+.csub{font-size:12px;color:#94a3b8;margin-top:3px}
+.panels{display:grid;grid-template-columns:2fr 1fr;gap:12px;padding:0 20px 12px}
+.panel{background:#fff;border-radius:8px;border:1px solid #e2e8f0;padding:14px}
+.panel h3{font-size:13px;font-weight:600;margin-bottom:10px;display:flex;align-items:center;gap:6px}
+input[type=number],input[type=text],select{border:1px solid #cbd5e1;border-radius:6px;padding:6px 9px;font-size:13px;background:#fff;width:100%}
+input[type=number]:focus,input[type=text]:focus,select:focus{outline:2px solid #2563eb;border-color:#2563eb}
+.btn{border:none;border-radius:6px;padding:7px 13px;font-size:12px;cursor:pointer;font-weight:500}
+.btn-p{background:#2563eb;color:#fff}.btn-p:hover{background:#1d4ed8}
+.btn-s{background:#f1f5f9;color:#374151;border:1px solid #d1d5db}.btn-s:hover{background:#e2e8f0}
+.btn-sm{padding:4px 10px;font-size:11px}
+.frow{display:flex;gap:8px;align-items:center;margin-bottom:8px}
+.frow label{font-size:11px;color:#64748b;white-space:nowrap;min-width:52px}
+.nota-row{display:flex;align-items:center;gap:6px;padding:6px 0;border-bottom:1px solid #f1f5f9;font-size:13px}
+.nota-row:last-child{border:none}
+.nbadge{background:#dbeafe;color:#1d4ed8;border-radius:4px;padding:2px 7px;font-size:11px;font-weight:700}
+.nbadge.done{background:#dcfce7;color:#15803d}
+.tw{padding:0 20px 24px;overflow-x:auto}
+table{width:100%;border-collapse:collapse;background:#fff;border-radius:8px;overflow:hidden;border:1px solid #e2e8f0;font-size:12px}
+thead th{background:#1e3a5f;color:#fff;padding:6px 8px;font-size:11px;font-weight:600;text-align:right;white-space:nowrap;position:sticky;top:0}
+thead th:first-child,thead th:nth-child(2){text-align:left}
+tbody td{padding:5px 8px;text-align:right;white-space:nowrap;border-bottom:1px solid #f1f5f9;font-size:13px}
+tbody td:first-child,tbody td:nth-child(2){text-align:left}
+.col-fecha{width:90px}.col-pago{width:60px}.col-num{width:80px}.col-st{width:75px}
+.yr-hdr{background:#334155;color:#fff;font-size:11px;font-weight:700;letter-spacing:.08em;padding:4px 10px}
+tr.paid td{background:#f0fdf4 !important;color:#15803d}
+tr.nxt td{background:#fffbeb !important;font-weight:600}
+tr.totals td{background:#1e3a5f;color:#fff;font-weight:700}
+.badge{border-radius:3px;padding:1px 5px;font-size:10px;margin-left:3px}
+.bt{background:#dbeafe;color:#1e40af}
+.ba{background:#d1fae5;color:#065f46}
+.bl{background:#fce7f3;color:#9d174d}
+.alert{background:#fef3c7;border:1px solid #fcd34d;border-radius:6px;padding:9px 14px;font-size:12px;color:#92400e;margin:0 20px 10px}
+.modal-bg{display:none;position:fixed;inset:0;background:rgba(0,0,0,.45);z-index:200;align-items:center;justify-content:center}
+.modal-bg.show{display:flex}
+.pkey{height:60px;border-radius:10px;border:none;background:rgba(255,255,255,0.12);color:#fff;font-size:22px;font-weight:600;cursor:pointer;transition:.15s}
+.pkey:hover{background:rgba(255,255,255,0.22)}
+.modal{background:#fff;border-radius:10px;padding:20px;width:320px}
+.modal h3{margin-bottom:12px;font-size:14px}
+.modal .frow{flex-direction:column;align-items:flex-start;gap:3px;margin-bottom:10px}
+.modal .frow label{font-size:12px;color:#475569}
+@media(max-width:700px){.panels{grid-template-columns:1fr}.cards{grid-template-columns:1fr 1fr}}
+</style>
+<script type="module">
+import{initializeApp}from"https://www.gstatic.com/firebasejs/10.12.0/firebase-app.js";
+import{getFirestore,doc,setDoc,getDoc}from"https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore.js";
+const firebaseConfig={
+  apiKey:"AIzaSyDo504EPyESDIjtwBnAZCoGk4obEO3jAK8",
+  authDomain:"prestamos-informales.firebaseapp.com",
+  projectId:"prestamos-informales",
+  storageBucket:"prestamos-informales.firebasestorage.app",
+  messagingSenderId:"1031929737524",
+  appId:"1:1031929737524:web:f0f4e75f7dfba05eab7561"
+};
+const app=initializeApp(firebaseConfig);
+const db=getFirestore(app);
+const DOC=doc(db,'app','estado');
+window._fbSave=async(data)=>{try{await setDoc(DOC,{data:JSON.stringify(data)},{merge:true});}catch(e){console.warn('Firebase save:',e);}};
+window._fbLoad=async()=>{try{const s=await getDoc(DOC);if(s.exists()&&s.data().data)return JSON.parse(s.data().data);}catch(e){console.warn('Firebase load:',e);}return null;};
+window._fbReady=true;
+document.dispatchEvent(new Event('fbReady'));
+</script>
+</head>
+<body>
+<div id="pin-screen" style="display:none;position:fixed;inset:0;background:#1e3a5f;z-index:999;align-items:center;justify-content:center;flex-direction:column;gap:20px">
+  <div style="color:#fff;font-size:22px;font-weight:700">🔐 Plan de Liquidación</div>
+  <div style="color:#93c5fd;font-size:13px;margin-bottom:4px" id="pin-sub">Ingresa tu PIN para continuar</div>
+  <div style="display:flex;gap:12px;margin:8px 0" id="pin-dots">
+    <div style="width:14px;height:14px;border-radius:50%;border:2px solid #93c5fd" id="d0"></div>
+    <div style="width:14px;height:14px;border-radius:50%;border:2px solid #93c5fd" id="d1"></div>
+    <div style="width:14px;height:14px;border-radius:50%;border:2px solid #93c5fd" id="d2"></div>
+    <div style="width:14px;height:14px;border-radius:50%;border:2px solid #93c5fd" id="d3"></div>
+  </div>
+  <div id="pin-grid" style="display:grid;grid-template-columns:repeat(3,70px);gap:10px">
+    <button class="pkey" onclick="pinKey('1')">1</button>
+    <button class="pkey" onclick="pinKey('2')">2</button>
+    <button class="pkey" onclick="pinKey('3')">3</button>
+    <button class="pkey" onclick="pinKey('4')">4</button>
+    <button class="pkey" onclick="pinKey('5')">5</button>
+    <button class="pkey" onclick="pinKey('6')">6</button>
+    <button class="pkey" onclick="pinKey('7')">7</button>
+    <button class="pkey" onclick="pinKey('8')">8</button>
+    <button class="pkey" onclick="pinKey('9')">9</button>
+    <button class="pkey" style="opacity:0;pointer-events:none"></button>
+    <button class="pkey" onclick="pinKey('0')">0</button>
+    <button class="pkey" onclick="pinKey('⌫')">⌫</button>
+  </div>
+  <div style="color:#ef4444;font-size:12px;min-height:16px" id="pin-err"></div>
+  <div style="color:#93c5fd;font-size:11px;opacity:.6;margin-top:8px">Jose Antonio · Préstamos Personales</div>
+</div>
+<div id="app" style="display:none"></div>
+
+<div class="modal-bg" id="modal">
+  <div class="modal">
+    <h3>➕ Agregar nueva nota</h3>
+    <div class="frow"><label>Nombre</label><input type="text" id="m-nombre" placeholder="Ej. Nota 4"></div>
+    <div class="frow"><label>Monto ($)</label><input type="number" id="m-monto" placeholder="10000" step="1000" min="1000"></div>
+    <div class="frow">
+      <label>Inicia en mes #</label>
+      <input type="number" id="m-startmes" value="1" min="1">
+      <span style="font-size:11px;color:#94a3b8">Mes 1 = inicio</span>
+    </div>
+    <p id="m-err" style="color:#dc2626;font-size:11px;min-height:14px;margin-bottom:8px"></p>
+    <div style="display:flex;gap:8px">
+      <button class="btn btn-p" style="flex:1" onclick="confirmNota()">Agregar</button>
+      <button class="btn btn-s" style="flex:1" onclick="closeModal()">Cancelar</button>
+    </div>
+  </div>
+</div>
+
+<script>
+const MX_TZ = 'America/Mexico_City';
+const MONTHS = ['ene','feb','mar','abr','may','jun','jul','ago','sep','oct','nov','dic'];
+
+const $ = id => document.getElementById(id);
+const fmt = n => '$' + Math.round(n).toLocaleString('es-MX');
+const fmtD = d => `01-${MONTHS[d.getMonth()]}-${d.getFullYear()}`;
+const fmtDLong = d => d.toLocaleDateString('es-MX',{day:'2-digit',month:'long',year:'numeric'});
+
+let S = {
+  notas: [
+    {id:1,nombre:'Nota 1',monto:30000,startMes:1},
+    {id:2,nombre:'Nota 2',monto:15000,startMes:1},
+    {id:3,nombre:'Nota 3',monto:6000,startMes:1},
+  ],
+  pagoFijo: 2550,
+  trimBase: 1000,
+  fechaInicio: new Date(2026,5,1),
+  ov: {},   // {mes: {libre, trimestral, pagado}}
+  nid: 4,
+};
+
+function calcular(){
+  const notas = S.notas.map(n=>({...n,saldo:n.monto}));
+  let fecha = new Date(S.fechaInicio);
+  let aho = 0;
+  const rows=[];
+
+  for(let mes=1;mes<=720;mes++){
+    const act = notas.filter(n=>n.saldo>0&&n.startMes<=mes);
+    if(!act.length && mes>1) break;
+
+    const deudaIni = act.reduce((s,n)=>s+n.saldo,0);
+    const interes  = Math.round(deudaIni*0.05);
+    const ahoMes   = Math.max(0, S.pagoFijo - interes);
+    aho += ahoMes;
+    const ahoDisp  = aho;
+
+    let pxAhorro=0;
+    if(aho>=1000){pxAhorro=Math.floor(aho/1000)*1000;aho%=1000;}
+
+    const ov = S.ov[mes]||{};
+    const trim = mes%3===0 ? (ov.trimestral!==undefined?ov.trimestral:S.trimBase) : 0;
+    const libre = ov.libre||0;
+    const abono = trim+libre+pxAhorro;
+
+    if(abono>0){
+      const sorted=[...act].sort((a,b)=>a.saldo-b.saldo);
+      let rem=abono;
+      for(const n of sorted){
+        if(rem<=0)break;
+        const idx=notas.findIndex(x=>x.id===n.id);
+        const p=Math.min(rem,notas[idx].saldo);
+        notas[idx].saldo-=p; rem-=p;
+      }
+    }
+
+    const deudaFin = notas.reduce((s,n)=>s+n.saldo,0);
+    rows.push({mes,fecha:new Date(fecha),deudaIni,interes,trim,libre,pxAhorro,ahoMes,ahoDisp,abono,deudaFin,pagado:ov.pagado||false,notasSaldo:notas.map(n=>({...n}))});
+    if(deudaFin<=0)break;
+    fecha=new Date(fecha.getFullYear(),fecha.getMonth()+1,1);
+  }
+  return rows;
+}
+
+function getNextPayIdx(rows){
+  const mxNow = new Date(new Date().toLocaleString('en-US',{timeZone:MX_TZ}));
+  return rows.findIndex(r=>!r.pagado&&(r.fecha.getFullYear()>mxNow.getFullYear()||(r.fecha.getFullYear()===mxNow.getFullYear()&&r.fecha.getMonth()>=mxNow.getMonth())));
+}
+
+function render(){
+  const rows = calcular();
+  const nxt  = getNextPayIdx(rows);
+  const last = rows[rows.length-1];
+  const cur  = rows[nxt]||rows[0];
+
+  const totInt   = rows.reduce((s,r)=>s+r.interes,0);
+  const totTrim  = rows.reduce((s,r)=>s+r.trim,0);
+  const totAho   = rows.reduce((s,r)=>s+r.pxAhorro,0);
+  const totLibre = rows.reduce((s,r)=>s+r.libre,0);
+  const totCap   = totTrim+totAho+totLibre;
+  const totDes   = rows.reduce((s,r)=>s+S.pagoFijo+r.trim+r.libre,0);
+  const nmeses   = rows.length;
+  const anios    = Math.floor(nmeses/12), mResto=nmeses%12;
+  const pagosHechos = rows.filter(r=>r.pagado);
+  const intPagadoHoy = pagosHechos.reduce((s,r)=>s+r.interes,0);
+  const nPagados = pagosHechos.length;
+  const deudaInicial = S.notas.reduce((s,n)=>s+n.monto,0);
+
+  // Deficit check
+  const deficit = cur && S.pagoFijo < cur.interes;
+
+  const nowStr = new Date().toLocaleString('es-MX',{timeZone:MX_TZ,day:'2-digit',month:'short',year:'numeric',hour:'2-digit',minute:'2-digit'});
+  const yBg  = ['#eff6ff','#f0fdf4','#fffbeb','#fdf4ff','#fff1f2','#f0f9ff'];
+
+  let h=`
+  <div class="hdr">
+    <div><div class="hdr-h1" style="font-size:15px;font-weight:700">📋 Plan de Liquidación de Deuda</div>
+    <div class="hdr-sub">Tasa 5% mensual · Estrategia bola de nieve · Abonos en múltiplos de $1,000</div></div>
+    <div class="clock" id="clock">🇲🇽 ${nowStr}</div>
+  </div>
+
+  ${deficit?`<div class="alert">⚠️ <b>Pago fijo insuficiente.</b> El interés actual es ${fmt(cur.interes)} pero tu pago fijo es ${fmt(S.pagoFijo)}. Déficit: ${fmt(cur.interes-S.pagoFijo)}/mes. Aumenta el pago fijo o abona capital.</div>`:''}
+
+  <div class="cards">
+    <div class="card c-blue"><div class="clabel">Deuda total</div><div class="cval" style="color:#2563eb">${fmt(cur?cur.deudaIni:0)}</div><div class="csub">${S.notas.length} nota${S.notas.length>1?'s':''}</div></div>
+    <div class="card c-red"><div class="clabel">Interés este mes</div><div class="cval" style="color:#dc2626">${fmt(cur?cur.interes:0)}</div><div class="csub">Próximo pago: ${cur?fmtD(cur.fecha):'—'}</div></div>
+    <div class="card c-green"><div class="clabel">Liquidación estimada</div><div class="cval" style="font-size:1rem;color:#16a34a">${last?fmtDLong(last.fecha):'—'}</div><div class="csub">${anios?anios+' año'+(anios>1?'s':''):''} ${mResto?mResto+' mes'+(mResto>1?'es':''):''} · ${nmeses} pagos total</div></div>
+    <div class="card c-amber"><div class="clabel">Total intereses proyectados</div><div class="cval" style="font-size:1rem;color:#d97706">${fmt(totInt)}</div><div class="csub">Deuda inicial: ${fmt(deudaInicial)}</div><div class="csub" style="color:#16a34a;font-size:11px;margin-top:4px">💡 Más que abones, menos pagas</div></div>
+    <div class="card c-purple"><div class="clabel">Intereses pagados a la fecha</div><div class="cval" style="font-size:1rem;color:#7c3aed">${fmt(intPagadoHoy)}</div><div class="csub">${nPagados} pago${nPagados!==1?'s':''} realizados</div></div>
+  </div>
+
+  <div class="panels">
+    <div class="panel">
+      <h3>📄 Notas activas <span style="margin-left:auto;display:flex;gap:6px"><button class="btn btn-s btn-sm" onclick="reiniciar()" style="color:#dc2626;border-color:#fca5a5">🔄 Reiniciar</button><button class="btn btn-p btn-sm" onclick="openModal()">+ Agregar nota</button></span></h3>
+      <div style="font-size:11px;color:#64748b;margin-bottom:8px;display:flex;gap:12px;flex-wrap:wrap">
+        <span>Pago fijo: <input type="number" value="${S.pagoFijo}" step="50" style="width:80px;display:inline-block;padding:3px 6px;font-size:12px" onchange="S.pagoFijo=+this.value;render()"></span>
+        <span>Trimestral: <input type="number" value="${S.trimBase}" step="1000" min="0" style="width:72px;display:inline-block;padding:3px 6px;font-size:12px" onchange="S.trimBase=+this.value;render()"></span>
+      </div>
+      <div style="display:grid;grid-template-columns:36px 1fr 90px 80px 78px;gap:6px;padding:3px 0 5px;font-size:11px;color:#94a3b8;font-weight:600;border-bottom:1px solid #e2e8f0;margin-bottom:2px">
+        <span style="text-align:center">#</span><span>Nota</span><span>Fecha sol.</span><span style="text-align:right">Monto</span><span>Estatus</span>
+      </div>
+      ${S.notas.map(n=>{
+        const saldoActual = cur ? (cur.notasSaldo.find(x=>x.id===n.id)||{saldo:0}).saldo : n.monto;
+        const isPagada = saldoActual===0;
+        const isPendiente = n.startMes > (nxt+1);
+        const stLabel = isPagada?'Pagada':isPendiente?'Pendiente':'En proceso';
+        const stColor = isPagada?'#dcfce7':isPendiente?'#fee2e2':'#fef9c3';
+        const stTxt   = isPagada?'#15803d':isPendiente?'#dc2626':'#92400e';
+        return `<div style="display:grid;grid-template-columns:36px 1fr 90px 80px 78px;align-items:center;gap:6px;padding:5px 0;border-bottom:1px solid #f1f5f9;font-size:13px">
+          <span style="background:#dbeafe;color:#1d4ed8;border-radius:4px;padding:2px 0;font-size:11px;font-weight:700;text-align:center">${n.id}</span>
+          <span style="font-weight:500">${n.nombre}</span>
+          <span style="font-size:11px;color:#94a3b8">${n.fechaSol||'—'}</span>
+          <span style="font-weight:600;color:${isPagada?'#15803d':'#0f172a'};text-align:right">${isPagada?'✓ $0':fmt(saldoActual)}</span>
+          <span style="display:flex;align-items:center;justify-content:space-between">
+            <span style="background:${stColor};color:${stTxt};border-radius:4px;padding:2px 6px;font-size:10px;font-weight:600">${stLabel}</span>
+            <button onclick="removeNota(${n.id})" style="background:none;border:none;cursor:pointer;color:#cbd5e1;font-size:13px;padding:0 2px" title="Eliminar">✕</button>
+          </span>
+        </div>`;
+      }).join('')}
+    </div>
+
+    <div class="panel">
+      <h3>💸 Abono extra</h3>
+      <div class="frow"><label>Mes:</label>
+        <select id="sel-mes" style="flex:1">
+          ${rows.slice(Math.max(0,nxt)).map(r=>`<option value="${r.mes}">${fmtD(r.fecha)} — pago #${r.mes}</option>`).join('')}
+        </select>
+      </div>
+      <div class="frow"><label>Monto:</label>
+        <input type="number" id="inp-libre" placeholder="ej. 2000" step="1000" min="1000" style="flex:1">
+        <span style="font-size:11px;color:#94a3b8;white-space:nowrap">múlt $1,000</span>
+      </div>
+      <button class="btn btn-p btn-sm" onclick="addLibre()">Aplicar abono</button>
+      ${Object.entries(S.ov).filter(([,v])=>v.libre>0).length>0?`
+      <div style="margin-top:10px;padding-top:8px;border-top:1px solid #f1f5f9">
+        <div style="font-size:11px;color:#64748b;margin-bottom:6px;font-weight:600">Abonos libres aplicados:</div>
+        ${Object.entries(S.ov).filter(([,v])=>v.libre>0).map(([mes,v])=>`
+          <div style="display:flex;align-items:center;justify-content:space-between;padding:3px 0;font-size:12px">
+            <span style="color:#475569">Mes ${mes} · ${fmtD(rows[parseInt(mes)-1]?.fecha||S.fechaInicio)}</span>
+            <span style="display:flex;align-items:center;gap:6px">
+              <span style="font-weight:600;color:#9d174d">${fmt(v.libre)}</span>
+              <button onclick="editLibre(${mes})" class="btn btn-sm" style="padding:2px 7px;font-size:10px;background:#fef3c7;border:1px solid #fcd34d;color:#92400e">✏️</button>
+              <button onclick="borrarLibre(${mes})" class="btn btn-sm" style="padding:2px 7px;font-size:10px;background:#fee2e2;border:1px solid #fca5a5;color:#dc2626">✕</button>
+            </span>
+          </div>`).join('')}
+      </div>`:''}
+      <div style="margin-top:8px;padding-top:8px;border-top:1px solid #f1f5f9;font-size:11px;color:#94a3b8">
+        Solo meses actuales o futuros · Trimestrales automáticos en meses 3, 6, 9…
+      </div>
+    </div>
+  </div>
+
+  <div class="tw">
+  <div style="text-align:center;padding:14px 0 8px">
+    <div style="font-size:16px;font-weight:700;color:#1e3a5f;margin-bottom:6px">📊 Detalle del plan de pagos por año</div>
+    <div style="font-size:12px;color:#94a3b8;display:flex;align-items:center;justify-content:center;gap:16px;flex-wrap:wrap">
+      <span><span style="background:#dbeafe;color:#1e40af;border-radius:3px;padding:1px 7px;font-size:11px;font-weight:700">T</span> Trimestral programado</span>
+      <span><span style="background:#fce7f3;color:#9d174d;border-radius:3px;padding:1px 7px;font-size:11px;font-weight:700">L</span> Abono libre extra</span>
+      <span><span style="background:#d1fae5;color:#065f46;border-radius:3px;padding:1px 7px;font-size:11px;font-weight:700">A</span> Capital generado por ahorro acumulado</span>
+    </div>
+  </div>
+  <table>
+    <thead><tr>
+      <th class="col-fecha" style="text-align:left">Fecha</th>
+      <th class="col-pago" style="text-align:left">Pago #</th>
+      <th class="col-num">Pago fijo</th>
+      <th class="col-num">Interés real</th>
+      <th class="col-num">Pago extra</th>
+      <th class="col-num">Ahorrado mes</th>
+      <th class="col-num">Ahorro acum.</th>
+      <th class="col-num">Deuda inicio</th>
+      <th class="col-num">Capital x ahorro acum.</th>
+      <th class="col-num">Deuda fin</th>
+      <th class="col-st">Estado</th>
+    </tr></thead>
+    <tbody>`;
+
+  let curYr=0,yrNum=0;
+  let yrInt=0,yrExtra=0,yrAho=0,yrLibre=0,yrPagos=0,yrDeudaFin=0;
+  rows.forEach((r,i)=>{
+    const yr=r.fecha.getFullYear();
+    if(yr!==curYr){
+      if(curYr!==0){
+        h+=`<tr style="background:#e2e8f0;font-weight:600;font-size:12px;color:#334155">
+          <td colspan="2" style="text-align:left;padding:5px 8px">Subtotal ${curYr} · ${yrPagos} pagos</td>
+          <td>${fmt(yrPagos*S.pagoFijo)}</td>
+          <td style="color:#dc2626">${fmt(yrInt)}</td>
+          <td>${yrExtra>0?fmt(yrExtra):'—'}</td>
+          <td>—</td><td>—</td>
+          <td style="color:#2563eb">${fmt(yrDeudaFin)}</td>
+          <td style="color:#065f46">${yrAho>0?fmt(yrAho):'—'}</td>
+          <td style="color:#2563eb">${fmt(yrDeudaFin)}</td><td></td>
+        </tr>`;
+        yrInt=0;yrExtra=0;yrAho=0;yrLibre=0;yrPagos=0;yrDeudaFin=0;
+      }
+      curYr=yr; yrNum++;
+      const yLabel=yrNum===1?'1er año':yrNum===2?'2do año':yrNum===3?'3er año':`${yrNum}° año`;
+      h+=`<tr><td colspan="11" class="yr-hdr">${yLabel} — ${yr}</td></tr>`;
+    }
+    yrInt+=r.interes; yrExtra+=r.trim+r.libre; yrAho+=r.pxAhorro; yrLibre+=r.libre; yrPagos++; yrDeudaFin=r.deudaFin;
+    const bg=yBg[(yrNum-1)%yBg.length];
+    const isNxt=i===nxt, isPaid=r.pagado;
+    const cls=isPaid?'paid':isNxt?'nxt':'';
+    const rowBg=isPaid?'':isNxt?'':bg;
+    const triBadge=r.trim>0?`<span class="badge bt">T</span>`:'';
+    const libBadge=r.libre>0?`<span class="badge bl">L</span>`:'';
+    const ahoBadge=r.pxAhorro>0?`<span class="badge ba">A</span>`:'';
+    const pagoExtra=(r.trim+r.libre)>0?fmt(r.trim+r.libre)+(triBadge+libBadge):'—';
+    h+=`<tr class="${cls}" style="${rowBg?'background:'+rowBg:''}">
+      <td>${isNxt?'▶ ':''}${fmtD(r.fecha)}</td>
+      <td>pago ${r.mes}</td>
+      <td>${fmt(S.pagoFijo)}</td>
+      <td style="color:#dc2626">${fmt(r.interes)}</td>
+      <td>${pagoExtra}</td>
+      <td style="color:#059669">${r.ahoMes>0?fmt(r.ahoMes):'—'}</td>
+      <td>${fmt(r.ahoDisp)}</td>
+      <td style="font-weight:600">${fmt(r.deudaIni)}</td>
+      <td style="color:#065f46">${r.pxAhorro>0?fmt(r.pxAhorro)+ahoBadge:'—'}</td>
+      <td style="font-weight:600;color:${r.deudaFin===0?'#16a34a':'#2563eb'}">${r.deudaFin===0?'✓ $0':fmt(r.deudaFin)}</td>
+      <td><button onclick="togglePagado(${r.mes})" class="btn btn-sm" style="background:${isPaid?'#dcfce7':'#f1f5f9'};border:1px solid ${isPaid?'#86efac':'#d1d5db'};color:${isPaid?'#15803d':'#374151'}">${isPaid?'✓ Pagado':'Marcar'}</button></td>
+    </tr>`;
+  });
+
+  // subtotal del último año
+  if(yrPagos>0){
+    h+=`<tr style="background:#e2e8f0;font-weight:600;font-size:12px;color:#334155">
+      <td colspan="2" style="text-align:left;padding:5px 8px">Subtotal ${curYr} · ${yrPagos} pagos</td>
+      <td>${fmt(yrPagos*S.pagoFijo)}</td>
+      <td style="color:#dc2626">${fmt(yrInt)}</td>
+      <td>${yrExtra>0?fmt(yrExtra):'—'}</td>
+      <td>—</td><td>—</td>
+      <td style="color:#16a34a">${fmt(yrDeudaFin)}</td>
+      <td style="color:#065f46">${yrAho>0?fmt(yrAho):'—'}</td>
+      <td style="color:#16a34a">${fmt(yrDeudaFin)}</td><td></td>
+    </tr>`;
+  }
+
+  const totExtra=rows.reduce((s,r)=>s+r.trim+r.libre,0);
+  const totAhoMes=rows.reduce((s,r)=>s+r.ahoMes,0);
+  h+=`<tr class="totals">
+    <td colspan="2">Totales · ${nmeses} pagos</td>
+    <td>—</td>
+    <td>${fmt(totInt)}</td>
+    <td>${fmt(totExtra)}</td>
+    <td>${fmt(totAhoMes)}</td>
+    <td>—</td>
+    <td>—</td>
+    <td>${fmt(totAho)}</td>
+    <td style="color:#86efac">$0</td>
+    <td></td>
+  </tr>`;
+
+  h+=`</tbody></table></div>
+
+  <div style="background:#1e3a5f;color:#fff;padding:14px 20px;margin:0 20px 24px;border-radius:8px;display:grid;grid-template-columns:repeat(auto-fit,minmax(180px,1fr));gap:10px;font-size:12px">
+    <div><div style="font-size:10px;opacity:.7;margin-bottom:3px">FECHA DE LIQUIDACIÓN</div><div style="font-size:15px;font-weight:700;color:#86efac">${last?fmtDLong(last.fecha):'—'}</div></div>
+    <div><div style="font-size:10px;opacity:.7;margin-bottom:3px">TOTAL INTERESES PAGADOS</div><div style="font-size:15px;font-weight:700;color:#fca5a5">${fmt(totInt)}</div></div>
+    <div><div style="font-size:10px;opacity:.7;margin-bottom:3px">TOTAL CAPITAL ABONADO</div><div style="font-size:15px;font-weight:700">${fmt(totCap)}</div><div style="opacity:.6;font-size:10px">T:${fmt(totTrim)} · A:${fmt(totAho)} · L:${fmt(totLibre)}</div></div>
+    <div><div style="font-size:10px;opacity:.7;margin-bottom:3px">TOTAL DESEMBOLSADO</div><div style="font-size:15px;font-weight:700">${fmt(totDes)}</div><div style="opacity:.6;font-size:10px">${anios?anios+' años ':''} ${mResto} meses</div></div>
+  </div>`;
+
+  $('app').innerHTML=h;
+  $('modal').innerHTML=`
+    <div class="modal">
+      <h3>➕ Agregar nueva nota</h3>
+      <div class="frow"><label>Nombre</label><input type="text" id="m-nombre" value="Nota ${S.nid}"></div>
+      <div class="frow"><label>Monto</label><input type="number" id="m-monto" placeholder="ej. 10000" step="1000" min="1000"></div>
+      <div class="frow"><label>Fecha solicitud</label><input type="date" id="m-fecha" value="${new Date().toISOString().split('T')[0]}"></div>
+      <div class="frow"><label>Inicia mes #</label><input type="number" id="m-smes" value="${Math.max(1,nxt+1)}" min="1"><span style="font-size:11px;color:#94a3b8;margin-left:6px">Mes 1 = ${fmtD(S.fechaInicio)}</span></div>
+      <p id="m-err" style="color:#dc2626;font-size:11px;min-height:14px;margin-bottom:8px"></p>
+      <div style="display:flex;gap:8px">
+        <button class="btn btn-p" style="flex:1" onclick="confirmNota()">Agregar</button>
+        <button class="btn btn-s" style="flex:1" onclick="closeModal()">Cancelar</button>
+      </div>
+    </div>`;
+}
+
+function togglePagado(mes){
+  if(!S.ov[mes]) S.ov[mes]={};
+  S.ov[mes].pagado=!S.ov[mes].pagado;
+  render();
+}
+
+function addLibre(){
+  const mes=parseInt($('sel-mes').value);
+  const m=parseInt($('inp-libre').value);
+  if(!m||m<1000||m%1000!==0){alert('El monto debe ser múltiplo de $1,000 (mínimo $1,000)');return;}
+  if(!S.ov[mes]) S.ov[mes]={};
+  S.ov[mes].libre=(S.ov[mes].libre||0)+m;
+  render();
+}
+
+function borrarLibre(mes){
+  if(!confirm('¿Eliminar este abono libre?'))return;
+  if(S.ov[mes]) S.ov[mes].libre=0;
+  render();
+}
+
+function editLibre(mes){
+  const actual=(S.ov[mes]||{}).libre||0;
+  const nuevo=prompt(`Editar abono del mes ${mes}. Monto actual: $${actual.toLocaleString()}\nNuevo monto (múltiplo de $1,000):`);
+  if(nuevo===null)return;
+  const n=parseInt(nuevo);
+  if(!n||n<0||n%1000!==0){alert('Debe ser múltiplo de $1,000 o 0 para eliminar.');return;}
+  if(!S.ov[mes])S.ov[mes]={};
+  S.ov[mes].libre=n;
+  render();
+}
+
+function removeNota(id){
+  if(S.notas.length<=1){alert('Debe quedar al menos una nota.');return;}
+  if(!confirm('¿Eliminar esta nota?'))return;
+  S.notas=S.notas.filter(n=>n.id!==id);
+  render();
+}
+
+function openModal(){$('modal').classList.add('show')}
+function closeModal(){$('modal').classList.remove('show')}
+
+function reiniciar(){
+  if(!confirm('¿Borrar todo y empezar desde cero?'))return;
+  S={notas:[],pagoFijo:2550,trimBase:1000,fechaInicio:new Date(2026,5,1),ov:{},nid:1};
+  render();
+}
+
+function confirmNota(){
+  const nombre=($('m-nombre').value||'').trim()||`Nota ${S.nid}`;
+  const monto=parseInt($('m-monto').value);
+  const smes=parseInt($('m-smes').value)||1;
+  const fechaSol=$('m-fecha')?$('m-fecha').value:'';
+  if(!monto||monto<1000||monto%1000!==0){$('m-err').textContent='El monto debe ser múltiplo de $1,000';return;}
+  S.notas.push({id:S.nid,nombre,monto,startMes:smes,fechaSol});
+  S.nid++;
+  closeModal();
+  render();
+}
+
+function updateClock(){
+  const el=$('clock');
+  if(!el)return;
+  el.textContent='🇲🇽 '+new Date().toLocaleString('es-MX',{timeZone:MX_TZ,day:'2-digit',month:'short',year:'numeric',hour:'2-digit',minute:'2-digit'});
+}
+setInterval(updateClock,30000);
+
+// ── Autosave a Firebase ──────────────────────────────────
+function saveState(){
+  const data={...S,fechaInicio:S.fechaInicio.toISOString()};
+  localStorage.setItem('prest_state',JSON.stringify(data));
+  if(window._fbSave) window._fbSave(data);
+}
+const _origRender=render;
+function render(){_origRender();saveState();}
+
+// ── Carga estado ─────────────────────────────────────────
+function applyState(data){
+  if(!data)return;
+  S.pagoFijo=data.pagoFijo||2550;
+  S.trimBase=data.trimBase||1000;
+  S.fechaInicio=data.fechaInicio?new Date(data.fechaInicio):new Date(2026,5,1);
+  S.notas=data.notas||[];
+  S.ov=data.ov||{};
+  S.nid=data.nid||1;
+}
+
+// ── Sistema PIN ──────────────────────────────────────────
+const SALT='prest_2026';
+async function hashPin(pin){
+  const buf=await crypto.subtle.digest('SHA-256',new TextEncoder().encode(pin+SALT));
+  return Array.from(new Uint8Array(buf)).map(b=>b.toString(16).padStart(2,'0')).join('').slice(0,16);
+}
+
+let pinVal='', pinMode='enter'; // 'enter' | 'create'
+
+async function initApp(){
+  $('pin-screen').style.display='flex';
+  // Intentar cargar desde Firebase primero, luego localStorage
+  let state=null;
+  const waitFb=()=>new Promise(res=>{
+    if(window._fbReady){res();return;}
+    document.addEventListener('fbReady',res,{once:true});
+    setTimeout(res,4000);
+  });
+  await waitFb();
+  if(window._fbLoad) state=await window._fbLoad();
+  if(!state){
+    const local=localStorage.getItem('prest_state');
+    if(local) state=JSON.parse(local);
+  }
+  if(state) applyState(state);
+
+  const storedHash=localStorage.getItem('prest_pin');
+  if(!storedHash){
+    pinMode='create';
+    $('pin-sub').textContent='Crea tu PIN de 4 dígitos';
+  } else {
+    pinMode='enter';
+    $('pin-sub').textContent='Ingresa tu PIN para continuar';
+  }
+}
+
+window.pinKey=async function(k){
+  if(k===''){return;}
+  if(k==='⌫'){pinVal=pinVal.slice(0,-1);updateDots();return;}
+  if(pinVal.length>=4)return;
+  pinVal+=k;
+  updateDots();
+  if(pinVal.length===4) await checkPin();
+};
+
+function updateDots(){
+  for(let i=0;i<4;i++){
+    const d=$('d'+i);
+    if(d) d.style.background=i<pinVal.length?'#60a5fa':'transparent';
+  }
+}
+
+let firstPin='';
+async function checkPin(){
+  const h=await hashPin(pinVal);
+  if(pinMode==='create'){
+    if(!firstPin){
+      firstPin=pinVal; pinVal='';
+      $('pin-sub').textContent='Confirma tu PIN';
+      updateDots(); return;
+    }
+    if(pinVal===firstPin){
+      localStorage.setItem('prest_pin',h);
+      unlock();
+    } else {
+      $('pin-err').textContent='Los PINs no coinciden. Intenta de nuevo.';
+      pinVal=''; firstPin=''; updateDots();
+      $('pin-sub').textContent='Crea tu PIN de 4 dígitos';
+    }
+  } else {
+    const stored=localStorage.getItem('prest_pin');
+    if(h===stored){ unlock(); }
+    else {
+      $('pin-err').textContent='PIN incorrecto. Intenta de nuevo.';
+      pinVal=''; updateDots();
+      setTimeout(()=>{if($('pin-err'))$('pin-err').textContent='';},2000);
+    }
+  }
+}
+
+function unlock(){
+  $('pin-screen').style.display='none';
+  $('app').style.display='block';
+  render();
+}
+
+initApp();
+</script>
+</body>
+</html>
