@@ -6,7 +6,7 @@
 <title>Plan de Liquidación · Préstamos</title>
 <style>
 *{box-sizing:border-box;margin:0;padding:0}
-body{font-family:system-ui,sans-serif;background:#f1f5f9;color:#0f172a;font-size:14px;max-width:1400px;margin:0 auto;padding:0 12px}
+body{font-family:system-ui,sans-serif;background:#f1f5f9;color:#0f172a;font-size:14px;max-width:1400px;margin:0 auto;padding:0 24px}
 .hdr{background:#1e3a5f;color:#fff;padding:12px 20px;display:flex;justify-content:space-between;align-items:center}
 .hdr h1{font-size:15px;font-weight:700}
 .hdr-sub{font-size:11px;opacity:.75;margin-top:2px}
@@ -21,7 +21,7 @@ body{font-family:system-ui,sans-serif;background:#f1f5f9;color:#0f172a;font-size
 .clabel{font-size:12px;color:#64748b;text-transform:uppercase;letter-spacing:.04em;margin-bottom:4px}
 .cval{font-size:1.3rem;font-weight:700;line-height:1.2}
 .csub{font-size:12px;color:#94a3b8;margin-top:3px}
-.panels{display:grid;grid-template-columns:2fr 1fr;gap:12px;padding:0 20px 12px}
+.panels{display:grid;grid-template-columns:repeat(3,1fr);gap:12px;padding:0 0 12px}
 .panel{background:#fff;border-radius:8px;border:1px solid #e2e8f0;padding:14px}
 .panel h3{font-size:13px;font-weight:600;margin-bottom:10px;display:flex;align-items:center;gap:6px}
 input[type=number],input[type=text],select{border:1px solid #cbd5e1;border-radius:6px;padding:6px 9px;font-size:13px;background:#fff;width:100%}
@@ -217,6 +217,11 @@ function render(){
   const intPagadoHoy = pagosHechos.reduce((s,r)=>s+r.interes,0);
   const nPagados = pagosHechos.length;
   const deudaInicial = S.notas.reduce((s,n)=>s+n.monto,0);
+  const lastPaidRow = [...rows].reverse().find(r=>r.pagado);
+  const getRealSaldo = id=>{
+    if(lastPaidRow) return (lastPaidRow.notasSaldo.find(x=>x.id===id)||{saldo:0}).saldo;
+    return S.notas.find(n=>n.id===id)?.monto||0;
+  };
 
   // Deficit check
   const deficit = cur && S.pagoFijo < cur.interes;
@@ -228,7 +233,10 @@ function render(){
   <div class="hdr">
     <div><div class="hdr-h1" style="font-size:15px;font-weight:700">📋 Plan de Liquidación de Deuda</div>
     <div class="hdr-sub">Tasa 5% mensual · Estrategia bola de nieve · Abonos en múltiplos de $1,000</div></div>
-    <div class="clock" id="clock">🇲🇽 ${nowStr}</div>
+    <div style="display:flex;align-items:center;gap:14px">
+      <div class="clock" id="clock">🇲🇽 ${nowStr}</div>
+      <button onclick="cerrarSesion()" style="background:rgba(255,255,255,0.15);border:1px solid rgba(255,255,255,0.3);color:#fff;border-radius:6px;padding:5px 11px;font-size:12px;cursor:pointer">🔒 Salir</button>
+    </div>
   </div>
 
   ${deficit?`<div class="alert">⚠️ <b>Pago fijo insuficiente.</b> El interés actual es ${fmt(cur.interes)} pero tu pago fijo es ${fmt(S.pagoFijo)}. Déficit: ${fmt(cur.interes-S.pagoFijo)}/mes. Aumenta el pago fijo o abona capital.</div>`:''}
@@ -248,24 +256,28 @@ function render(){
         <span>Pago fijo: <input type="number" value="${S.pagoFijo}" step="50" style="width:80px;display:inline-block;padding:3px 6px;font-size:12px" onchange="S.pagoFijo=+this.value;render()"></span>
         <span>Trimestral: <input type="number" value="${S.trimBase}" step="1000" min="0" style="width:72px;display:inline-block;padding:3px 6px;font-size:12px" onchange="S.trimBase=+this.value;render()"></span>
       </div>
-      <div style="display:grid;grid-template-columns:36px 1fr 90px 80px 78px;gap:6px;padding:3px 0 5px;font-size:11px;color:#94a3b8;font-weight:600;border-bottom:1px solid #e2e8f0;margin-bottom:2px">
-        <span style="text-align:center">#</span><span>Nota</span><span>Fecha sol.</span><span style="text-align:right">Monto</span><span>Estatus</span>
+      <div style="display:grid;grid-template-columns:28px 1fr 82px 74px 74px 74px 72px;gap:4px;padding:3px 0 5px;font-size:10px;color:#94a3b8;font-weight:600;border-bottom:1px solid #e2e8f0;margin-bottom:2px;text-align:right">
+        <span style="text-align:center">#</span><span style="text-align:left">Nota</span><span>Solicitado</span><span>F. Sol.</span><span>Saldo real</span><span>F. Liquidación</span><span>Estatus</span>
       </div>
       ${S.notas.map(n=>{
-        const saldoActual = cur ? (cur.notasSaldo.find(x=>x.id===n.id)||{saldo:0}).saldo : n.monto;
-        const isPagada = saldoActual===0;
+        const realSaldo = getRealSaldo(n.id);
+        const isPagada = realSaldo===0;
         const isPendiente = n.startMes > (nxt+1);
-        const stLabel = isPagada?'Pagada':isPendiente?'Pendiente':'En proceso';
+        const stLabel = isPagada?'✓ Pagada':isPendiente?'Pendiente':'En proceso';
         const stColor = isPagada?'#dcfce7':isPendiente?'#fee2e2':'#fef9c3';
         const stTxt   = isPagada?'#15803d':isPendiente?'#dc2626':'#92400e';
-        return `<div style="display:grid;grid-template-columns:36px 1fr 90px 80px 78px;align-items:center;gap:6px;padding:5px 0;border-bottom:1px solid #f1f5f9;font-size:13px">
-          <span style="background:#dbeafe;color:#1d4ed8;border-radius:4px;padding:2px 0;font-size:11px;font-weight:700;text-align:center">${n.id}</span>
-          <span style="font-weight:500">${n.nombre}</span>
-          <span style="font-size:11px;color:#94a3b8">${n.fechaSol||'—'}</span>
-          <span style="font-weight:600;color:${isPagada?'#15803d':'#0f172a'};text-align:right">${isPagada?'✓ $0':fmt(saldoActual)}</span>
+        const fiqRow  = rows.find(r=>r.notasSaldo.find(x=>x.id===n.id&&x.saldo===0));
+        const fLiq    = fiqRow?fmtD(fiqRow.fecha):'—';
+        return `<div style="display:grid;grid-template-columns:28px 1fr 82px 74px 74px 74px 72px;align-items:center;gap:4px;padding:5px 0;border-bottom:1px solid #f1f5f9;font-size:12px;text-align:right">
+          <span style="background:#dbeafe;color:#1d4ed8;border-radius:4px;padding:2px 0;font-size:10px;font-weight:700;text-align:center">${n.id}</span>
+          <span style="font-weight:500;text-align:left">${n.nombre}</span>
+          <span style="color:#64748b">${fmt(n.monto)}</span>
+          <span style="font-size:10px;color:#94a3b8">${n.fechaSol||'—'}</span>
+          <span style="font-weight:700;color:${isPagada?'#15803d':'#0f172a'}">${isPagada?'$0':fmt(realSaldo)}</span>
+          <span style="font-size:10px;color:${isPagada?'#15803d':'#94a3b8'}">${fLiq}</span>
           <span style="display:flex;align-items:center;justify-content:space-between">
-            <span style="background:${stColor};color:${stTxt};border-radius:4px;padding:2px 6px;font-size:10px;font-weight:600">${stLabel}</span>
-            <button onclick="removeNota(${n.id})" style="background:none;border:none;cursor:pointer;color:#cbd5e1;font-size:13px;padding:0 2px" title="Eliminar">✕</button>
+            <span style="background:${stColor};color:${stTxt};border-radius:4px;padding:2px 5px;font-size:9px;font-weight:700">${stLabel}</span>
+            <button onclick="removeNota(${n.id})" style="background:none;border:none;cursor:pointer;color:#cbd5e1;font-size:12px;padding:0 1px">✕</button>
           </span>
         </div>`;
       }).join('')}
@@ -299,6 +311,52 @@ function render(){
       <div style="margin-top:8px;padding-top:8px;border-top:1px solid #f1f5f9;font-size:11px;color:#94a3b8">
         Solo meses actuales o futuros · Trimestrales automáticos en meses 3, 6, 9…
       </div>
+    </div>
+
+    <div class="panel">
+      <h3>📈 Mi avance</h3>
+      ${(()=>{
+        const totalAbonado = deudaInicial - (cur?cur.deudaIni:deudaInicial);
+        const pct = deudaInicial>0?Math.round(totalAbonado/deudaInicial*100):0;
+        const ahoAcum = cur?cur.ahoDisp:0;
+        const proximoLimite = cur?`01–10 de ${MONTHS[cur.fecha.getMonth()]} ${cur.fecha.getFullYear()}`:'—';
+        const mesesRest = nmeses - nPagados;
+        return `
+        <div style="margin-bottom:10px">
+          <div style="display:flex;justify-content:space-between;font-size:11px;color:#64748b;margin-bottom:4px">
+            <span>Progreso de liquidación</span><span style="font-weight:700;color:#2563eb">${pct}%</span>
+          </div>
+          <div style="background:#e2e8f0;border-radius:99px;height:8px">
+            <div style="background:#2563eb;border-radius:99px;height:8px;width:${pct}%;transition:.3s"></div>
+          </div>
+        </div>
+        <div style="display:flex;flex-direction:column;gap:7px;font-size:12px">
+          <div style="display:flex;justify-content:space-between;padding:5px 0;border-bottom:1px solid #f1f5f9">
+            <span style="color:#64748b">Ventana próximo pago</span>
+            <span style="font-weight:600;color:#dc2626">${proximoLimite}</span>
+          </div>
+          <div style="display:flex;justify-content:space-between;padding:5px 0;border-bottom:1px solid #f1f5f9">
+            <span style="color:#64748b">Pagos realizados</span>
+            <span style="font-weight:600">${nPagados} de ${nmeses}</span>
+          </div>
+          <div style="display:flex;justify-content:space-between;padding:5px 0;border-bottom:1px solid #f1f5f9">
+            <span style="color:#64748b">Meses restantes</span>
+            <span style="font-weight:600;color:#2563eb">${mesesRest}</span>
+          </div>
+          <div style="display:flex;justify-content:space-between;padding:5px 0;border-bottom:1px solid #f1f5f9">
+            <span style="color:#64748b">Ahorro acumulado</span>
+            <span style="font-weight:600;color:#059669">${fmt(ahoAcum)}</span>
+          </div>
+          <div style="display:flex;justify-content:space-between;padding:5px 0;border-bottom:1px solid #f1f5f9">
+            <span style="color:#64748b">Capital abonado</span>
+            <span style="font-weight:600;color:#16a34a">${fmt(totalAbonado)}</span>
+          </div>
+          <div style="display:flex;justify-content:space-between;padding:5px 0">
+            <span style="color:#64748b">Intereses pagados</span>
+            <span style="font-weight:600;color:#7c3aed">${fmt(intPagadoHoy)}</span>
+          </div>
+        </div>`;
+      })()}
     </div>
   </div>
 
@@ -468,6 +526,15 @@ function removeNota(id){
 
 function openModal(){$('modal').classList.add('show')}
 function closeModal(){$('modal').classList.remove('show')}
+
+function cerrarSesion(){
+  if(!confirm('¿Cerrar sesión? Tendrás que ingresar tu PIN de nuevo.'))return;
+  $('app').style.display='none';
+  $('pin-screen').style.display='flex';
+  pinVal=''; updateDots();
+  $('pin-sub').textContent='Ingresa tu PIN para continuar';
+  $('pin-err').textContent='';
+}
 
 function reiniciar(){
   if(!confirm('¿Borrar todo y empezar desde cero?'))return;
