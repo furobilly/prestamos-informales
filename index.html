@@ -799,114 +799,161 @@ function renderPayDots(){
 
 initApp();
 </script>
-<script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/exceljs@4.3.0/dist/exceljs.min.js"></script>
 <script>
-function exportarExcel(){
-  const wb = XLSX.utils.book_new();
-  const rows = calcular();
-  const MONTHS = ['ene','feb','mar','abr','may','jun','jul','ago','sep','oct','nov','dic'];
-  const fmtD = d => `01-${MONTHS[d.getMonth()]}-${d.getFullYear()}`;
-  const money = n => Math.round(n||0);
+async function exportarExcel(){
+  const wb=new ExcelJS.Workbook();
+  const rows=calcular();
+  const mo=['ene','feb','mar','abr','may','jun','jul','ago','sep','oct','nov','dic'];
+  const fd=d=>`01-${mo[d.getMonth()]}-${d.getFullYear()}`;
 
-  // ── Hoja 1: Configuración ──────────────────────────────
-  const cfg = [
-    ["CONFIGURACIÓN DEL PLAN DE LIQUIDACIÓN"],
-    [],
-    ["Pago fijo mensual:", S.pagoFijo],
-    ["Abono trimestral:", S.trimBase],
-    ["Fecha primer pago:", fmtD(S.fechaInicio)],
-    [],
-    ["NOTAS (hasta 5 préstamos)"],
-    ["#","Nombre","Fecha solicitud","Monto original ($)"]
-  ];
-  S.notas.forEach(n => cfg.push([n.id, n.nombre, n.fechaSol||'—', n.monto]));
-  cfg.push([]);
-  cfg.push(["DEUDA TOTAL:", S.notas.reduce((s,n)=>s+n.monto,0)]);
-  const wsCfg = XLSX.utils.aoa_to_sheet(cfg);
-  wsCfg['!cols'] = [{wch:42},{wch:20},{wch:16},{wch:16}];
-  XLSX.utils.book_append_sheet(wb, wsCfg, "Configuración");
+  // Helpers de estilo
+  const A=h=>'FF'+h.replace('#','');
+  const fl=h=>({type:'pattern',pattern:'solid',fgColor:{argb:A(h)}});
+  const fn=(bold,sz,h)=>({name:'Arial',bold,size:sz,color:{argb:A(h)}});
+  const al=(h,v,w)=>({horizontal:h,vertical:v,wrapText:!!w});
+  const bs=()=>{const s={style:'thin',color:{argb:'FFCCCCCC'}};return{top:s,bottom:s,left:s,right:s}};
+  const sc=(cell,bold,sz,color,bg,h,v,wrap,fmt)=>{
+    cell.font=fn(!!bold,sz||12,color||'000000');
+    if(bg)cell.fill=fl(bg);
+    cell.alignment=al(h||'left',v||'center',!!wrap);
+    cell.border=bs();
+    if(fmt)cell.numFmt=fmt;
+  };
+  const MH=(ws,r,c1,c2,text,bg,color,sz,bold,height)=>{
+    if(c1!==c2)ws.mergeCells(r,c1,r,c2);
+    const c=ws.getCell(r,c1);c.value=text;
+    sc(c,bold,sz,color,bg,'center','center',true);
+    if(height)ws.getRow(r).height=height;
+    return c;
+  };
 
-  // ── Hoja 2: Plan de Pagos ──────────────────────────────
-  const deudaInicial = S.notas.reduce((s,n)=>s+n.monto,0);
-  const plan = [];
-  // Título
-  plan.push(["PLAN DE LIQUIDACIÓN DE PRÉSTAMOS INFORMALES"]);
-  plan.push(["Tasa fija 5% mensual · Estrategia de liquidación acelerada · Abonos en múltiplos de $1,000"]);
-  plan.push([`Generado: ${new Date().toLocaleDateString('es-MX')}`]);
-  plan.push([]);
-  // Resumen
-  plan.push(["RESUMEN DEL PLAN"]);
-  plan.push(["Deuda total","Interés este mes","Pago fijo mensual","Abono trimestral","Notas activas"]);
-  const cur = rows[0];
-  plan.push([
-    deudaInicial,
-    money(deudaInicial*0.05),
-    S.pagoFijo,
-    S.trimBase,
-    S.notas.length
-  ]);
-  plan.push([]);
-  // Notas activas
-  plan.push(["NOTAS ACTIVAS"]);
-  plan.push(["#","Nombre","Fecha solicitud","Monto original","Monto inicial","ESTATUS (a mano)","Fecha pagada (a mano)","Observaciones"]);
-  S.notas.forEach(n => plan.push([n.id, n.nombre, n.fechaSol||'—', n.monto, n.monto, "", "", ""]));
-  plan.push([]);
-  // Instrucciones
-  plan.push(["INSTRUCCIONES: Cuando realice el pago escriba ✓ en '¿Pagó?', anote la fecha real. Columnas sin fondo = fórmula. Columnas amarillas = llenar a mano con pluma."]);
-  plan.push(["COLOR NARANJA = Trimestral programado | COLOR VERDE = Abono por ahorro acumulado | AMARILLO = Llenar a mano"]);
-  plan.push([]);
-  // Headers tabla
-  plan.push(["DETALLE DEL PLAN DE PAGOS POR AÑO"]);
-  plan.push(["Fecha","Pago #","Pago fijo","Interés real","Abono capital","Tipo de abono",
-             "Deuda inicio","Ahorro acum.","¿Pagó? (✓/✗)","Fecha real de pago","Abono extra","Notas / Observaciones"]);
+  // Colores
+  const D='1E3A5F',D2='334155',INP='EFF6FF',NAR='FAEEDA',VER='EAF3DE',AMR='FFFBEB',GRS='F8FAFC',W='FFFFFF';
 
-  let curYr = 0;
-  rows.forEach(r => {
-    const yr = r.fecha.getFullYear();
-    if(yr !== curYr){
-      const label = {2026:"1er año",2027:"2do año",2028:"3er año",2029:"4to año",2030:"5to año"}[yr]||`${yr}`;
-      plan.push([`${label} — ${yr}`,"","","","","","","","","","",""]);
-      curYr = yr;
-    }
-    plan.push([
-      fmtD(r.fecha), r.mes, money(S.pagoFijo), money(r.interes),
-      r.abono>0?money(r.abono):"—",
-      r.trim>0&&r.pxAhorro>0?"Trimestral + Ahorro":r.trim>0?"Trimestral":r.pxAhorro>0?"Ahorro acum.":"—",
-      money(r.deudaIni), money(r.ahoDisp),
-      "","","",""
-    ]);
+  // ── HOJA 1: Configuración ────────────────────────────────────────────────
+  const w1=wb.addWorksheet('Configuración');
+  w1.columns=[{width:42},{width:20},{width:16},{width:16}];
+  MH(w1,1,1,4,'CONFIGURACIÓN DEL PLAN DE LIQUIDACIÓN',D,W,15,true,28);
+  MH(w1,2,1,4,'Modifique solo las celdas azules. La hoja Plan de Pagos se actualiza automáticamente.',INP,'1E40AF',11,false,18);
+  w1.getRow(3).height=8;
+  MH(w1,4,1,4,'PARÁMETROS DE PAGO',D2,W,13,true,22);
+  [['Pago fijo mensual:',S.pagoFijo,'$#,##0'],['Abono trimestral:',S.trimBase,'$#,##0'],['Fecha primer pago:',fd(S.fechaInicio),'@']].forEach(([lbl,val,fmt],i)=>{
+    const r=5+i;
+    const cl=w1.getCell(r,1);cl.value=lbl;sc(cl,false,12,'374151',GRS,'left');
+    const cv=w1.getCell(r,2);cv.value=val;sc(cv,true,14,'1E40AF',INP,'center','center',false,fmt);
+    w1.getRow(r).height=22;
   });
-  // Totales
-  const totInt = rows.reduce((s,r)=>s+r.interes,0);
-  const totCap = rows.reduce((s,r)=>s+(r.abono||0),0);
-  plan.push(["TOTALES","",money(rows.length*S.pagoFijo),money(totInt),money(totCap),"","","","","","",""]);
-  plan.push([]);
-  plan.push(["Recuerde: El pago es del 1 al 10 de cada mes. Sin penalización si no puede dar el trimestral."]);
+  w1.getRow(8).height=8;
+  MH(w1,9,1,4,'NOTAS (PRÉSTAMOS) — Hasta 5 notas',D2,W,13,true,22);
+  ['#','Nombre de la nota','Fecha de solicitud','Monto original ($)'].forEach((h,i)=>{const c=w1.getCell(10,i+1);sc(c,true,11,W,D2,'center');c.value=h;});w1.getRow(10).height=20;
+  S.notas.forEach((n,i)=>{
+    const r=11+i;
+    [[n.id,'@',GRS,'center'],[n.nombre,'@',INP,'left'],[n.fechaSol||'—','@',INP,'center'],[n.monto,'$#,##0',INP,'right']].forEach(([v,fmt,bg,h],j)=>{
+      const c=w1.getCell(r,j+1);c.value=v;sc(c,false,13,'0F172A',bg,h,'center',false,fmt);
+    });w1.getRow(r).height=24;
+  });
+  for(let i=S.notas.length;i<5;i++){for(let j=1;j<=4;j++){const c=w1.getCell(11+i,j);c.fill=fl(W);c.border=bs();}w1.getRow(11+i).height=24;}
+  w1.mergeCells(16,1,16,3);const tl=w1.getCell(16,1);tl.value='DEUDA TOTAL:';sc(tl,true,12,W,D2,'right');w1.getRow(16).height=26;
+  const tv=w1.getCell(16,4);tv.value=S.notas.reduce((s,n)=>s+n.monto,0);sc(tv,true,15,'1E40AF',INP,'center','center',false,'$#,##0');
+  w1.getRow(17).height=8;
+  const ic=MH(w1,18,1,4,'INSTRUCCIONES: Ingrese el monto de cada nota en Monto original. Deje en blanco las notas que no use. Una vez configurado, vaya a Plan de Pagos e imprima.',INP,'1E3A5F',11,false,40);
+  ic.alignment=al('left','center',true);
 
-  const wsPlan = XLSX.utils.aoa_to_sheet(plan);
-  wsPlan['!cols'] = [{wch:13},{wch:7},{wch:11},{wch:11},{wch:11},{wch:18},
-                     {wch:12},{wch:11},{wch:10},{wch:14},{wch:11},{wch:28}];
-  XLSX.utils.book_append_sheet(wb, wsPlan, "Plan de Pagos");
+  // ── HOJA 2: Plan de Pagos ────────────────────────────────────────────────
+  const w2=wb.addWorksheet('Plan de Pagos',{pageSetup:{orientation:'landscape',paperSize:1,fitToWidth:1,fitToPage:true}});
+  w2.columns=[{width:5},{width:13},{width:6},{width:11},{width:11},{width:11},{width:18},{width:13},{width:11},{width:9},{width:14},{width:11},{width:28}];
+  let R=1;
+  MH(w2,R,1,13,'PLAN DE LIQUIDACIÓN DE PRÉSTAMOS INFORMALES',D,W,16,true,30);R++;
+  MH(w2,R,1,13,'Tasa fija 5% mensual  ·  Estrategia de liquidación acelerada  ·  Abonos en múltiplos de $1,000',D,'BFDBFE',11,false,18);R++;
+  w2.mergeCells(R,1,R,7);const gc=w2.getCell(R,1);gc.value=`Generado: ${new Date().toLocaleDateString('es-MX')}`;gc.font=fn(false,10,'64748B');gc.fill=fl('F1F5F9');
+  w2.mergeCells(R,8,R,13);const gc2=w2.getCell(R,8);gc2.value='Hoja horizontal tamaño carta — control manual';gc2.font=fn(false,10,'64748B');gc2.fill=fl('F1F5F9');gc2.alignment=al('right','center');
+  w2.getRow(R).height=16;R++;w2.getRow(R).height=6;R++;
+  MH(w2,R,1,13,'RESUMEN DEL PLAN',D,W,13,true,22);R++;
+  const dI=S.notas.reduce((s,n)=>s+n.monto,0);
+  [['DEUDA TOTAL',dI,'$#,##0','1E40AF',INP],['INTERÉS ESTE MES',Math.round(dI*.05),'$#,##0','991B1B','FCEBEB'],
+   ['PAGO FIJO MENSUAL',S.pagoFijo,'$#,##0','1E40AF',INP],['ABONO TRIMESTRAL',S.trimBase,'$#,##0','92400E',NAR],
+   ['TOTAL NOTAS',S.notas.length,'0 "notas"','14532D',VER],['TOTAL PAGOS EST.',rows.length,'0 "pagos"','534AB7','EEEDFE']
+  ].forEach(([lbl,val,fmt,tc,bg],i)=>{
+    const c1=i*2+1,c2=c1+1;
+    w2.mergeCells(R,c1,R,c2);w2.mergeCells(R+1,c1,R+1,c2);
+    const cl=w2.getCell(R,c1);cl.value=lbl;sc(cl,true,9,'64748B',bg,'center');cl.border=bs();w2.getRow(R).height=16;
+    const cv=w2.getCell(R+1,c1);cv.value=val;sc(cv,true,15,tc,bg,'center','center',false,fmt);cv.border=bs();w2.getRow(R+1).height=26;
+  });R+=2;w2.getRow(R).height=6;R++;
+  MH(w2,R,1,13,'NOTAS ACTIVAS',D,W,13,true,22);R++;
+  [[1,2,'#'],[3,4,'Nombre'],[5,6,'Fecha sol.'],[7,8,'Monto original'],[9,10,'Monto inicial'],[11,11,'ESTATUS (a mano)'],[12,12,'Fecha pagada'],[13,13,'Observaciones']].forEach(([c1,c2,h])=>{
+    if(c1!==c2)w2.mergeCells(R,c1,R,c2);const c=w2.getCell(R,c1);c.value=h;const m=c1>=11;
+    sc(c,true,10,m?'92400E':W,m?'FEF3C7':D2,'center','center',true);
+  });w2.getRow(R).height=30;R++;
+  S.notas.forEach((n,i)=>{
+    const r=R+i;
+    [[n.id,1,2,W,'center',0],[n.nombre,3,4,W,'left',0],[n.fechaSol||'—',5,6,W,'center',0],[n.monto,7,8,W,'right','$#,##0'],[n.monto,9,10,W,'right','$#,##0'],['',11,11,AMR,'center',0],['',12,12,AMR,'center',0],['',13,13,AMR,'left',0]].forEach(([v,c1,c2,bg,h,fmt])=>{
+      if(c1!==c2)w2.mergeCells(r,c1,r,c2);const c=w2.getCell(r,c1);c.value=v;
+      sc(c,false,13,'0F172A',bg,h,'center',false,fmt||'@');
+    });w2.getRow(r).height=24;
+  });
+  for(let i=S.notas.length;i<5;i++){for(let j=1;j<=13;j++){const c=w2.getCell(R+i,j);c.fill=fl(j>=11?AMR:W);c.border=bs();}w2.getRow(R+i).height=24;}
+  R+=5;w2.getRow(R).height=6;R++;
+  const ic2=MH(w2,R,1,13,'INSTRUCCIONES: Cuando realice el pago escriba ✓ en Pagó. Las columnas AMARILLAS son para llenar con pluma. Cuando una nota quede pagada, escriba PAGADA y la fecha.',INP,'1E3A5F',11,false,36);ic2.alignment=al('left','center',true);R++;
+  MH(w2,R,1,13,'COLOR NARANJA = Trimestral programado  |  COLOR VERDE = Abono por ahorro acumulado  |  COLOR AMARILLO = Llenar a mano',AMR,'44403C',10,false,18);R++;
+  w2.getRow(R).height=6;R++;
+  MH(w2,R,1,13,'DETALLE DEL PLAN DE PAGOS POR AÑO',D,W,13,true,22);R++;
+  [['Año',1],['Fecha',2],['#',3],['Pago\nfijo',4],['Interés\nreal',5],['Abono\ncapital',6],['Tipo de abono',7],['Deuda\ninicio',8],['Ahorro\nacum.',9],['¿Pagó?\n(✓/✗)',10],['Fecha real\nde pago',11],['Abono\nextra',12],['Notas / Observaciones',13]].forEach(([h,col])=>{
+    const c=w2.getCell(R,col);c.value=h;const m=col>=10;
+    sc(c,true,11,m?'92400E':W,m?'FEF3C7':D,'center','center',true);
+  });w2.getRow(R).height=34;R++;
+  let curYr=0;
+  const yLbl={2026:'1er año',2027:'2do año',2028:'3er año',2029:'4to año',2030:'5to año'};
+  rows.forEach(row=>{
+    const yr=row.fecha.getFullYear();
+    if(yr!==curYr){
+      w2.mergeCells(R,1,R,13);const yc=w2.getCell(R,1);
+      yc.value=`  ${yLbl[yr]||yr+'°'} — ${yr}`;
+      sc(yc,true,12,W,D2,'left');w2.getRow(R).height=18;R++;curYr=yr;
+    }
+    const esT=row.trim>0,esA=row.pxAhorro>0;
+    const bg=esA&&!esT?VER:esT?NAR:W;
+    [[yr,bg,'64748B',0,'center'],[fd(row.fecha),bg,'0F172A',0,'center'],[row.mes,bg,'64748B',0,'center'],
+     [S.pagoFijo,bg,'1E40AF','$#,##0','right'],[row.interes,bg,'991B1B','$#,##0','right'],
+     [row.abono>0?row.abono:'—',bg,'0F172A',row.abono>0?'$#,##0':'@','right'],
+     [esT&&esA?'Trimestral + Ahorro':esT?'Trimestral':esA?'Ahorro acum.':'—',bg,'0F172A','@','center'],
+     [row.deudaIni,bg,'185FA5','$#,##0','right'],[row.ahoDisp,bg,'15803D','$#,##0','right'],
+     ['',AMR,'0F172A','@','center'],['',AMR,'64748B','@','center'],
+     ['',AMR,'64748B','$#,##0','right'],['',AMR,'64748B','@','left']
+    ].forEach(([v,rbg,color,fmt,h],i)=>{const c=w2.getCell(R,i+1);c.value=v;sc(c,false,12,color,rbg,h,'center',false,fmt&&fmt!==0?fmt:'@');});
+    w2.getRow(R).height=20;R++;
+  });
+  w2.mergeCells(R,1,R,3);const ttl=w2.getCell(R,1);ttl.value='TOTALES';sc(ttl,true,12,W,D,'center');w2.getRow(R).height=24;
+  [[4,rows.length*S.pagoFijo],[5,rows.reduce((s,r)=>s+r.interes,0)],[6,rows.reduce((s,r)=>s+(r.abono||0),0)]].forEach(([col,v])=>{const c=w2.getCell(R,col);c.value=v;sc(c,true,12,W,D,'right','center',false,'$#,##0');});
+  for(let c=7;c<=13;c++){const cc=w2.getCell(R,c);cc.fill=fl(D);cc.border=bs();}R++;
+  const fn2=MH(w2,R,1,13,'Recuerde: El pago es del 1 al 10 de cada mes. Sin penalización si no puede dar el trimestral.',INP,'1E3A5F',11,false,32);fn2.alignment=al('left','center',true);
 
-  // ── Hoja 3: Abonos Extra ───────────────────────────────
-  const extra = [
-    ["REGISTRO DE ABONOS EXTRA Y PAGOS ADICIONALES"],
-    ["Anote aquí cualquier pago adicional que NO sea el pago fijo ni el trimestral programado"],
-    [],
-    ["#","Fecha del abono","Mes de pago (ej. jun-2026)","Monto del abono extra","¿A qué nota se aplicó?","Motivo / Observaciones"]
-  ];
-  for(let i=1;i<=30;i++) extra.push([i,"","","","",""]);
-  extra.push([]);
-  extra.push(["TOTAL ABONOS EXTRA DADOS:","","","","",""]);
-  extra.push(["IMPORTANTE: Abonos en múltiplos de $1,000. Solo del 1 al 10 de cada mes."]);
-  const wsExtra = XLSX.utils.aoa_to_sheet(extra);
-  wsExtra['!cols'] = [{wch:5},{wch:16},{wch:18},{wch:16},{wch:22},{wch:34}];
-  XLSX.utils.book_append_sheet(wb, wsExtra, "Abonos Extra");
+  // ── HOJA 3: Abonos Extra ─────────────────────────────────────────────────
+  const w3=wb.addWorksheet('Abonos Extra',{pageSetup:{orientation:'landscape',paperSize:1}});
+  w3.columns=[{width:6},{width:16},{width:18},{width:16},{width:22},{width:34}];
+  MH(w3,1,1,6,'REGISTRO DE ABONOS EXTRA Y PAGOS ADICIONALES',D,W,14,true,28);
+  MH(w3,2,1,6,'Anote aquí cualquier pago adicional que NO sea el pago fijo mensual ni el trimestral programado',INP,'1E40AF',11,false,20);
+  w3.getRow(3).height=8;
+  ['#','Fecha del abono','Mes de pago (ej. jun-2026)','Monto del abono extra','¿A qué nota se aplicó?','Motivo / Observaciones'].forEach((h,i)=>{const c=w3.getCell(4,i+1);c.value=h;sc(c,true,12,W,D,'center','center',true);});w3.getRow(4).height=34;
+  for(let i=0;i<30;i++){
+    const r=5+i,bg=i%2===0?GRS:W;
+    [1,2,3,4,5,6].forEach(col=>{const c=w3.getCell(r,col);if(col===1)c.value=i+1;sc(c,false,13,col===1?'64748B':'374151',bg,col===4?'right':col===6?'left':'center','center',false,col===4?'$#,##0':col===2?'DD/MM/YYYY':'@');});
+    w3.getRow(r).height=24;
+  }
+  w3.mergeCells(35,1,35,3);const sl=w3.getCell(35,1);sl.value='TOTAL ABONOS EXTRA DADOS:';sc(sl,true,13,W,D2,'right');w3.getRow(35).height=28;
+  const sv=w3.getCell(35,4);sv.value=0;sc(sv,true,15,'14532D',VER,'center','center',false,'$#,##0');
+  [5,6].forEach(c=>{const cc=w3.getCell(35,c);cc.fill=fl(VER);cc.border=bs();});
+  const fi=MH(w3,36,1,6,'IMPORTANTE: Los abonos extra deben ser en múltiplos de $1,000. Solo se pueden dar del 1 al 10 de cada mes. Anote en qué nota se aplicó.',INP,'1E3A5F',12,false,40);fi.alignment=al('left','center',true);
 
   // Descargar
-  const fecha = new Date().toLocaleDateString('es-MX').replace(/\//g,'-');
-  XLSX.writeFile(wb, `Plan_Liquidacion_${fecha}.xlsx`);
+  const buffer=await wb.xlsx.writeBuffer();
+  const blob=new Blob([buffer],{type:'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'});
+  const url=URL.createObjectURL(blob);
+  const a=document.createElement('a');a.href=url;
+  a.download=`Plan_Liquidacion_${new Date().toLocaleDateString('es-MX').replace(/\//g,'-')}.xlsx`;
+  a.click();URL.revokeObjectURL(url);
 }
 </script>
 </body>
+
 </html>
