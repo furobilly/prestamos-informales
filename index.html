@@ -361,7 +361,7 @@ function render(){
 
   <div class="panels">
     <div class="panel">
-      <h3>📄 Notas activas <span class="chip"><span class="dot"></span>${S.notas.filter(n=>getRealSaldo(n.id)>0).length} abiertas</span><span style="margin-left:auto;display:flex;gap:8px"><button class="btn btn-s btn-sm" onclick="reiniciar()">🔄 Reiniciar</button><button class="btn btn-p btn-sm" onclick="openModal()">+ Agregar nota</button></span></h3>
+      <h3>📄 Notas activas <span class="chip"><span class="dot"></span>${S.notas.filter(n=>getRealSaldo(n.id)>0).length} abiertas</span><span style="margin-left:auto;display:flex;gap:8px"><button class="btn btn-s btn-sm" onclick="exportarExcel()" style="color:#15803d;border-color:#86efac">📥 Excel</button><button class="btn btn-s btn-sm" onclick="reiniciar()">🔄 Reiniciar</button><button class="btn btn-p btn-sm" onclick="openModal()">+ Agregar nota</button></span></h3>
       <div style="font-size:11px;color:#64748b;margin-bottom:8px;display:flex;gap:12px;flex-wrap:wrap">
         <span>Pago fijo: <input type="number" value="${S.pagoFijo}" step="50" style="width:80px;display:inline-block;padding:3px 6px;font-size:12px" onchange="S.pagoFijo=+this.value;render()"></span>
         <span>Trimestral: <input type="number" value="${S.trimBase}" step="1000" min="0" style="width:72px;display:inline-block;padding:3px 6px;font-size:12px" onchange="S.trimBase=+this.value;render()"></span>
@@ -798,6 +798,115 @@ function renderPayDots(){
 }
 
 initApp();
+</script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
+<script>
+function exportarExcel(){
+  const wb = XLSX.utils.book_new();
+  const rows = calcular();
+  const MONTHS = ['ene','feb','mar','abr','may','jun','jul','ago','sep','oct','nov','dic'];
+  const fmtD = d => `01-${MONTHS[d.getMonth()]}-${d.getFullYear()}`;
+  const money = n => Math.round(n||0);
+
+  // ── Hoja 1: Configuración ──────────────────────────────
+  const cfg = [
+    ["CONFIGURACIÓN DEL PLAN DE LIQUIDACIÓN"],
+    [],
+    ["Pago fijo mensual:", S.pagoFijo],
+    ["Abono trimestral:", S.trimBase],
+    ["Fecha primer pago:", fmtD(S.fechaInicio)],
+    [],
+    ["NOTAS (hasta 5 préstamos)"],
+    ["#","Nombre","Fecha solicitud","Monto original ($)"]
+  ];
+  S.notas.forEach(n => cfg.push([n.id, n.nombre, n.fechaSol||'—', n.monto]));
+  cfg.push([]);
+  cfg.push(["DEUDA TOTAL:", S.notas.reduce((s,n)=>s+n.monto,0)]);
+  const wsCfg = XLSX.utils.aoa_to_sheet(cfg);
+  wsCfg['!cols'] = [{wch:42},{wch:20},{wch:16},{wch:16}];
+  XLSX.utils.book_append_sheet(wb, wsCfg, "Configuración");
+
+  // ── Hoja 2: Plan de Pagos ──────────────────────────────
+  const deudaInicial = S.notas.reduce((s,n)=>s+n.monto,0);
+  const plan = [];
+  // Título
+  plan.push(["PLAN DE LIQUIDACIÓN DE PRÉSTAMOS INFORMALES"]);
+  plan.push(["Tasa fija 5% mensual · Estrategia de liquidación acelerada · Abonos en múltiplos de $1,000"]);
+  plan.push([`Generado: ${new Date().toLocaleDateString('es-MX')}`]);
+  plan.push([]);
+  // Resumen
+  plan.push(["RESUMEN DEL PLAN"]);
+  plan.push(["Deuda total","Interés este mes","Pago fijo mensual","Abono trimestral","Notas activas"]);
+  const cur = rows[0];
+  plan.push([
+    deudaInicial,
+    money(deudaInicial*0.05),
+    S.pagoFijo,
+    S.trimBase,
+    S.notas.length
+  ]);
+  plan.push([]);
+  // Notas activas
+  plan.push(["NOTAS ACTIVAS"]);
+  plan.push(["#","Nombre","Fecha solicitud","Monto original","Monto inicial","ESTATUS (a mano)","Fecha pagada (a mano)","Observaciones"]);
+  S.notas.forEach(n => plan.push([n.id, n.nombre, n.fechaSol||'—', n.monto, n.monto, "", "", ""]));
+  plan.push([]);
+  // Instrucciones
+  plan.push(["INSTRUCCIONES: Cuando realice el pago escriba ✓ en '¿Pagó?', anote la fecha real. Columnas sin fondo = fórmula. Columnas amarillas = llenar a mano con pluma."]);
+  plan.push(["COLOR NARANJA = Trimestral programado | COLOR VERDE = Abono por ahorro acumulado | AMARILLO = Llenar a mano"]);
+  plan.push([]);
+  // Headers tabla
+  plan.push(["DETALLE DEL PLAN DE PAGOS POR AÑO"]);
+  plan.push(["Fecha","Pago #","Pago fijo","Interés real","Abono capital","Tipo de abono",
+             "Deuda inicio","Ahorro acum.","¿Pagó? (✓/✗)","Fecha real de pago","Abono extra","Notas / Observaciones"]);
+
+  let curYr = 0;
+  rows.forEach(r => {
+    const yr = r.fecha.getFullYear();
+    if(yr !== curYr){
+      const label = {2026:"1er año",2027:"2do año",2028:"3er año",2029:"4to año",2030:"5to año"}[yr]||`${yr}`;
+      plan.push([`${label} — ${yr}`,"","","","","","","","","","",""]);
+      curYr = yr;
+    }
+    plan.push([
+      fmtD(r.fecha), r.mes, money(S.pagoFijo), money(r.interes),
+      r.abono>0?money(r.abono):"—",
+      r.trim>0&&r.pxAhorro>0?"Trimestral + Ahorro":r.trim>0?"Trimestral":r.pxAhorro>0?"Ahorro acum.":"—",
+      money(r.deudaIni), money(r.ahoDisp),
+      "","","",""
+    ]);
+  });
+  // Totales
+  const totInt = rows.reduce((s,r)=>s+r.interes,0);
+  const totCap = rows.reduce((s,r)=>s+(r.abono||0),0);
+  plan.push(["TOTALES","",money(rows.length*S.pagoFijo),money(totInt),money(totCap),"","","","","","",""]);
+  plan.push([]);
+  plan.push(["Recuerde: El pago es del 1 al 10 de cada mes. Sin penalización si no puede dar el trimestral."]);
+
+  const wsPlan = XLSX.utils.aoa_to_sheet(plan);
+  wsPlan['!cols'] = [{wch:13},{wch:7},{wch:11},{wch:11},{wch:11},{wch:18},
+                     {wch:12},{wch:11},{wch:10},{wch:14},{wch:11},{wch:28}];
+  XLSX.utils.book_append_sheet(wb, wsPlan, "Plan de Pagos");
+
+  // ── Hoja 3: Abonos Extra ───────────────────────────────
+  const extra = [
+    ["REGISTRO DE ABONOS EXTRA Y PAGOS ADICIONALES"],
+    ["Anote aquí cualquier pago adicional que NO sea el pago fijo ni el trimestral programado"],
+    [],
+    ["#","Fecha del abono","Mes de pago (ej. jun-2026)","Monto del abono extra","¿A qué nota se aplicó?","Motivo / Observaciones"]
+  ];
+  for(let i=1;i<=30;i++) extra.push([i,"","","","",""]);
+  extra.push([]);
+  extra.push(["TOTAL ABONOS EXTRA DADOS:","","","","",""]);
+  extra.push(["IMPORTANTE: Abonos en múltiplos de $1,000. Solo del 1 al 10 de cada mes."]);
+  const wsExtra = XLSX.utils.aoa_to_sheet(extra);
+  wsExtra['!cols'] = [{wch:5},{wch:16},{wch:18},{wch:16},{wch:22},{wch:34}];
+  XLSX.utils.book_append_sheet(wb, wsExtra, "Abonos Extra");
+
+  // Descargar
+  const fecha = new Date().toLocaleDateString('es-MX').replace(/\//g,'-');
+  XLSX.writeFile(wb, `Plan_Liquidacion_${fecha}.xlsx`);
+}
 </script>
 </body>
 </html>
